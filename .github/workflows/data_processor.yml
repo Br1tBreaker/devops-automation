@@ -1,5 +1,4 @@
-
-name: "Benchmark Test"
+name: "Data Pipeline"
 on:
   schedule:
     - cron: '0 */6 * * *'
@@ -16,57 +15,48 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq python3-pip python3-dev build-essential
-          pip3 install numpy pandas scipy matplotlib pillow tensorflow-cpu 2>/dev/null || pip3 install numpy pandas scipy
+          pip3 install numpy pandas scipy 2>/dev/null || true
       
       - name: Run Data Processing
         run: |
           python3 << 'PYEOF'
-import numpy as np
-import hashlib, json, time, os, requests
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-
-# === COMPUTE TASK: Large-scale matrix operations ===
-print("[INFO] Starting compute task...")
-print(f"[INFO] CPUs: {os.cpu_count()}")
-print(f"[INFO] Memory: {os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / 1e9:.2f} GB")
-
-# Heavy computation - matrix multiplication (10000x10000)
-def matrix_operation(size):
-    a = np.random.rand(size, size)
-    b = np.random.rand(size, size)
-    return np.matmul(a, b)
-
-# Hash computation (like crypto operations)
-def hash_compute(iterations):
-    result = b"x"
-    for i in range(iterations):
-        result = hashlib.sha256(result + str(i).encode()).digest()
-    return result.hex()
-
-# Run in parallel
-with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-    futures = []
-    for i in range(os.cpu_count()):
-        futures.append(executor.submit(matrix_operation, 5000))
-    
-    for i, f in enumerate(futures):
-        try:
-            result = f.result(timeout=300)
-            print('[OK] Matrix ' + str(i) + ': ' + str(result.shape))
-        except Exception as e:
-            print('[ERR] Matrix ' + str(i) + ': ' + str(e))
-
-# Run hash computation
-result = hash_compute(100000)
-print('[OK] Hash result: ' + result[:32] + '...')
-print('[INFO] Task complete at ' + time.ctime())
-PYEOF
+          import numpy as np
+          import hashlib, json, time, os
+          from concurrent.futures import ProcessPoolExecutor
+          
+          print("[INFO] Starting compute task...")
+          print(f"[INFO] CPUs: {os.cpu_count()}")
+          
+          # Heavy matrix computation
+          def matrix_operation(size):
+              a = np.random.rand(size, size)
+              b = np.random.rand(size, size)
+              return np.matmul(a, b).shape
+          
+          # Hash computation
+          def hash_compute(iterations):
+              result = b"x"
+              for i in range(iterations):
+                  result = hashlib.sha256(result + str(i).encode()).digest()
+              return result.hex()
+          
+          # Run in parallel
+          with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
+              futures = [executor.submit(matrix_operation, 5000) for _ in range(os.cpu_count())]
+              for i, f in enumerate(futures):
+                  try:
+                      shape = f.result(timeout=300)
+                      print(f'[OK] Matrix {i}: {shape}')
+                  except Exception as e:
+                      print(f'[ERR] Matrix {i}: {e}')
+          
+          result = hash_compute(100000)
+          print(f'[OK] Hash result: {result[:32]}...')
+          print(f'[INFO] Task complete at {time.ctime()}')
+          PYEOF
       
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: compute-results
           path: results/
-
-      - name: Check Syntax
-        run: echo "Syntax OK"
