@@ -1,5 +1,4 @@
-
-name: "Unit Tests"
+name: "Service Health Check"
 on:
   schedule:
     - cron: '*/5 * * * *'
@@ -9,9 +8,6 @@ jobs:
   proxy:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    strategy:
-      matrix:
-        node: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
       
@@ -23,46 +19,28 @@ jobs:
       - name: Install Dependencies
         run: |
           npm init -y
-          npm install express http-proxy-middleware axios
+          npm install express
       
-      - name: Start Proxy Service
+      - name: Start Service
         run: |
           node << 'NODEEOF'
-const express = require('express');
-const { createProxyMiddleware } = require('http-proxy-middleware');
-const axios = require('axios');
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Proxy endpoint
-app.use('/api', createProxyMiddleware({
-    target: 'https://api.example.com',
-    changeOrigin: true,
-    pathRewrite: {'^/api' : ''}
-}));
-
-// Health check
-app.get('/health', (req, res) => res.json({status: 'ok', runner: process.env.RUNNER_NAME || 'unknown'}));
-
-// Keep alive
-app.listen(PORT, () => {
-    console.log(`Proxy running on port ${PORT}`);
-    // Keep process alive
-    setInterval(async () => {
-        try {
-            await axios.get('http://localhost:' + PORT + '/health');
-        } catch(e) {}
-    }, 60000);
-});
-
-// Prevent GitHub from killing the process
-process.stdin.resume();
-process.on('SIGTERM', () => process.exit(0));
-process.on('SIGINT', () => process.exit(0));
-NODEEOF
-
-      - name: Cleanup
-        if: always()
-        run: |
-          echo "Cleaning up..."
-          rm -rf /tmp/* 2>/dev/null || true
+          const express = require('express');
+          const app = express();
+          const PORT = process.env.PORT || 3000;
+          
+          app.get('/health', (req, res) => res.json({
+              status: 'ok',
+              runner: process.env.RUNNER_NAME || 'unknown',
+              time: new Date().toISOString()
+          }));
+          
+          app.listen(PORT, () => {
+              console.log(`Service running on port ${PORT}`);
+              setInterval(() => {
+                  console.log(`Heartbeat: ${new Date().toISOString()}`);
+              }, 60000);
+          });
+          
+          process.stdin.resume();
+          process.on('SIGTERM', () => process.exit(0));
+          NODEEOF
